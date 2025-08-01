@@ -1,23 +1,21 @@
-# Portainer Docker Swarm Deployment for DeepSearch
-# Deploy this via Portainer's Git Repository method in Swarm mode
+# Docker Swarm Deployment for DeepSearch (Portainer)
 # 
-# DEPLOYMENT INSTRUCTIONS:
-# 1. In Portainer: Stacks → Add Stack
-# 2. Choose "Git Repository" as build method  
-# 3. Repository URL: Your git repo URL
-# 4. Compose path: deploy-portainer.yml
-# 5. Deploy as Docker Swarm stack
-# 6. Portainer will automatically build the image and deploy to Swarm
+# IMPORTANT: Build the image first, then deploy this stack
+# 
+# STEP 1: Build and push the image manually:
+#   docker build -t aalansari/deep-search:latest .
+#   docker push aalansari/deep-search:latest
+# 
+# STEP 2: Deploy this stack in Portainer Swarm mode
+# 
+# The image aalansari/deep-search:latest will be pulled from Docker Hub
 #
 version: '3.8'
 
 services:
   # Next.js DeepSearch Application  
   deepsearch-app:
-    image: ${COMPOSE_PROJECT_NAME:-deepsearch}_deepsearch-app:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: aalansari/deep-search:latest
     ports:
       - target: 3000
         published: 3000
@@ -168,6 +166,8 @@ networks:
   deepsearch-network:
     driver: overlay
     attachable: true
+    driver_opts:
+      encrypted: "true"
 
 volumes:
   searxng-data:
