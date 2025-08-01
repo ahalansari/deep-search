@@ -91,9 +91,9 @@ export default function SearchInterface() {
     } catch (error) {
       console.error('Deep search failed:', error);
       console.error('Request details:', { query, maxDepth: searchDepth, settings });
-      if (error.response) {
-        console.error('Response data:', error.response.data);
-        console.error('Response status:', error.response.status);
+      if (error && typeof error === 'object' && 'response' in error) {
+        console.error('Response data:', (error as any).response.data);
+        console.error('Response status:', (error as any).response.status);
       }
       setAnswer('Deep search failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
