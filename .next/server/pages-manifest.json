@@ -1,0 +1,9 @@
+{
+  "/_app": "pages/_app.js",
+  "/_error": "pages/_error.js",
+  "/_document": "pages/_document.js",
+  "/": "pages/index.js",
+  "/api/ai-models": "pages/api/ai-models.js",
+  "/settings": "pages/settings.js",
+  "/api/deep-search": "pages/api/deep-search.js"
+}
