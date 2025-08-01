@@ -1,0 +1,83 @@
+# Production Docker Compose for Portainer Deployment
+version: '3.8'
+
+services:
+  # Next.js DeepSearch Application
+  deepsearch-app:
+    image: deepsearch:latest
+    container_name: deepsearch-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=${APP_URL:-http://localhost:3000}
+      - SEARXNG_URL=http://searxng:8080
+      - AI_URL=${AI_URL:-http://localhost:1234}
+    depends_on:
+      - searxng
+    networks:
+      - deepsearch-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "com.deepsearch.service=app"
+      - "com.deepsearch.version=1.0"
+
+  # SearXNG Search Engine
+  searxng:
+    image: searxng/searxng:latest
+    container_name: deepsearch-searxng
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./searxng/searxng.settings.yml:/etc/searxng/settings.yml:ro
+      - searxng-data:/var/lib/searxng
+    environment:
+      - BASE_URL=${SEARXNG_BASE_URL:-http://localhost:8080/}
+      - INSTANCE_NAME=DeepSearch-SearXNG
+      - SEARXNG_SECRET=${SEARXNG_SECRET:-please-change-this-secret-key}
+    networks:
+      - deepsearch-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/search?q=test&format=json"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "com.deepsearch.service=searxng"
+      - "com.deepsearch.version=1.0"
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: deepsearch-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    networks:
+      - deepsearch-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    labels:
+      - "com.deepsearch.service=redis"
+      - "com.deepsearch.version=1.0"
+
+networks:
+  deepsearch-network:
+    driver: bridge
+    name: deepsearch-network
+
+volumes:
+  searxng-data:
+    name: deepsearch-searxng-data
+  redis-data:
+    name: deepsearch-redis-data

@@ -1,0 +1,187 @@
+# Portainer Stack Deployment File for DeepSearch
+# Use this file to deploy the complete DeepSearch stack in Portainer
+
+version: '3.8'
+
+services:
+  # Next.js DeepSearch Application
+  deepsearch-app:
+    image: ghcr.io/yourusername/deepsearch:latest  # Replace with your image
+    container_name: deepsearch-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=${APP_URL:-http://localhost:3000}
+      - SEARXNG_URL=http://searxng:8080
+      - AI_URL=${AI_URL:-http://host.docker.internal:1234}
+    depends_on:
+      - searxng
+      - redis
+    networks:
+      - deepsearch-network
+    volumes:
+      - app-logs:/app/logs
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1"
+        reservations:
+          memory: 512M
+          cpus: "0.5"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.deepsearch.rule=Host(`${APP_DOMAIN:-deepsearch.local}`)"
+      - "traefik.http.services.deepsearch.loadbalancer.server.port=3000"
+      - "com.deepsearch.service=app"
+
+  # SearXNG Search Engine (Integrated from existing setup)
+  searxng:
+    image: searxng/searxng:latest
+    container_name: deepsearch-searxng
+    restart: unless-stopped
+    ports:
+      - "${SEARXNG_PORT:-8080}:8080"
+    volumes:
+      - searxng-settings:/etc/searxng:rw
+      - searxng-data:/var/lib/searxng
+    environment:
+      - BASE_URL=${SEARXNG_BASE_URL:-http://localhost:8080/}
+      - INSTANCE_NAME=${SEARXNG_INSTANCE_NAME:-DeepSearch-SearXNG}
+      - SEARXNG_SECRET=${SEARXNG_SECRET:-please-change-this-secret-key}
+    networks:
+      - deepsearch-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/search?q=test&format=json"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+        reservations:
+          memory: 256M
+          cpus: "0.25"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.searxng.rule=Host(`${SEARXNG_DOMAIN:-search.local}`)"
+      - "traefik.http.services.searxng.loadbalancer.server.port=8080"
+      - "com.deepsearch.service=searxng"
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: deepsearch-redis
+    restart: unless-stopped
+    command: >
+      redis-server 
+      --appendonly yes 
+      --maxmemory ${REDIS_MAX_MEMORY:-256mb}
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    volumes:
+      - redis-data:/data
+    networks:
+      - deepsearch-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+        reservations:
+          memory: 128M
+          cpus: "0.1"
+    labels:
+      - "com.deepsearch.service=redis"
+
+  # Nginx Reverse Proxy (Optional)
+  nginx:
+    image: nginx:alpine
+    container_name: deepsearch-nginx
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - nginx-config:/etc/nginx/conf.d
+      - nginx-logs:/var/log/nginx
+      - ssl-certs:/etc/nginx/ssl:ro
+    depends_on:
+      - deepsearch-app
+      - searxng
+    networks:
+      - deepsearch-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+        reservations:
+          memory: 64M
+          cpus: "0.1"
+    labels:
+      - "com.deepsearch.service=proxy"
+
+  # Watchtower for Auto-Updates (Optional)
+  watchtower:
+    image: containrrr/watchtower
+    container_name: deepsearch-watchtower
+    restart: unless-stopped
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=${UPDATE_INTERVAL:-3600}
+      - WATCHTOWER_INCLUDE_STOPPED=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - deepsearch-network
+    labels:
+      - "com.deepsearch.service=watchtower"
+
+networks:
+  deepsearch-network:
+    driver: bridge
+    name: deepsearch-network
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  searxng-data:
+    name: deepsearch-searxng-data
+    driver: local
+  searxng-settings:
+    name: deepsearch-searxng-settings
+    driver: local
+  redis-data:
+    name: deepsearch-redis-data
+    driver: local
+  app-logs:
+    name: deepsearch-app-logs
+    driver: local
+  nginx-config:
+    name: deepsearch-nginx-config
+    driver: local
+  nginx-logs:
+    name: deepsearch-nginx-logs
+    driver: local
+  ssl-certs:
+    name: deepsearch-ssl-certs
+    driver: local

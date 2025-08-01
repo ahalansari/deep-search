@@ -1,0 +1,134 @@
+version: '3.8'
+
+services:
+  # Next.js DeepSearch Application
+  deepsearch-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: deepsearch-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://localhost:3000
+      - AI_URL=${AI_URL:-http://localhost:1234}
+      - SEARXNG_URL=http://searxng:8080
+    depends_on:
+      - searxng
+    networks:
+      - deepsearch-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.deepsearch.rule=Host(`deepsearch.local`)"
+      - "traefik.http.services.deepsearch.loadbalancer.server.port=3000"
+
+  # SearXNG Search Engine
+  searxng:
+    image: searxng/searxng:latest
+    container_name: deepsearch-searxng
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./searxng/searxng.settings.yml:/etc/searxng/settings.yml:ro
+      - searxng-data:/var/lib/searxng
+    environment:
+      - BASE_URL=http://searxng:8080/
+      - INSTANCE_NAME=DeepSearch-SearXNG
+      - SEARXNG_SECRET=please-change-this-secret-key
+    networks:
+      - deepsearch-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.searxng.rule=Host(`search.local`)"
+      - "traefik.http.services.searxng.loadbalancer.server.port=8080"
+
+
+
+  # Redis for Caching (Optional)
+  redis:
+    image: redis:7-alpine
+    container_name: deepsearch-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    networks:
+      - deepsearch-network
+
+  # Nginx Reverse Proxy (Optional)
+  nginx:
+    image: nginx:alpine
+    container_name: deepsearch-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx-logs:/var/log/nginx
+    depends_on:
+      - deepsearch-app
+      - searxng
+    networks:
+      - deepsearch-network
+
+  # Monitoring with Prometheus (Optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: deepsearch-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - deepsearch-network
+
+  # Grafana Dashboard (Optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: deepsearch-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - deepsearch-network
+
+networks:
+  deepsearch-network:
+    driver: bridge
+    name: deepsearch-network
+
+volumes:
+  searxng-data:
+    name: deepsearch-searxng-data
+  redis-data:
+    name: deepsearch-redis-data
+  prometheus-data:
+    name: deepsearch-prometheus-data
+  grafana-data:
+    name: deepsearch-grafana-data
+  nginx-logs:
+    name: deepsearch-nginx-logs
