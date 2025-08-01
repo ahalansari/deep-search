@@ -1,25 +1,26 @@
-# Portainer Docker Swarm Deployment with Build Support
-# This uses the build context but creates a local image for Swarm deployment
+# Portainer Deployment for DeepSearch
+# 
+# IMPORTANT: This file is designed for Docker Compose mode in Portainer
+# If you're seeing build errors, make sure you're deploying as "Docker Compose" not "Swarm"
+#
 version: '3.8'
-
-x-build: &build-config
-  context: .
-  dockerfile: Dockerfile
 
 services:
   # Next.js DeepSearch Application
   deepsearch-app:
-    image: deepsearch-app:latest
-    build: *build-config
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
-      - target: 3000
-        published: 3000
-        mode: host
+      - "3000:3000"
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=${APP_URL:-http://localhost:3000}
       - SEARXNG_URL=http://searxng:8080
       - AI_URL=${AI_URL:-http://host.docker.internal:1234}
+    depends_on:
+      - searxng
+      - redis
     networks:
       - deepsearch-network
     volumes:
@@ -30,32 +31,17 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-      resources:
-        limits:
-          memory: 1G
-          cpus: "1"
-        reservations:
-          memory: 512M
-          cpus: "0.5"
-      labels:
-        - "traefik.enable=true"
-        - "traefik.http.routers.deepsearch.rule=Host(`${APP_DOMAIN:-deepsearch.local}`)"
-        - "traefik.http.services.deepsearch.loadbalancer.server.port=3000"
-        - "com.deepsearch.service=app"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.deepsearch.rule=Host(`${APP_DOMAIN:-deepsearch.local}`)"
+      - "traefik.http.services.deepsearch.loadbalancer.server.port=3000"
+      - "com.deepsearch.service=app"
 
   # SearXNG Search Engine
   searxng:
     image: searxng/searxng:latest
     ports:
-      - target: 8080
-        published: 8080
-        mode: host
+      - "8080:8080"
     volumes:
       - searxng-settings:/etc/searxng:rw
       - searxng-data:/var/lib/searxng
@@ -70,24 +56,11 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-      resources:
-        limits:
-          memory: 512M
-          cpus: "0.5"
-        reservations:
-          memory: 256M
-          cpus: "0.25"
-      labels:
-        - "traefik.enable=true"
-        - "traefik.http.routers.searxng.rule=Host(`${SEARXNG_DOMAIN:-search.local}`)"
-        - "traefik.http.services.searxng.loadbalancer.server.port=8080"
-        - "com.deepsearch.service=searxng"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.searxng.rule=Host(`${SEARXNG_DOMAIN:-search.local}`)"
+      - "traefik.http.services.searxng.loadbalancer.server.port=8080"
+      - "com.deepsearch.service=searxng"
 
   # Redis Cache
   redis:
@@ -109,78 +82,36 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-      resources:
-        limits:
-          memory: 512M
-          cpus: "0.5"
-        reservations:
-          memory: 128M
-          cpus: "0.1"
-      labels:
-        - "com.deepsearch.service=redis"
+    labels:
+      - "com.deepsearch.service=redis"
 
   # Nginx Reverse Proxy (Optional)
   nginx:
     image: nginx:alpine
     ports:
-      - target: 80
-        published: 80
-        mode: host
-      - target: 443
-        published: 443
-        mode: host
+      - "80:80"
+      - "443:443"
     volumes:
       - nginx-config:/etc/nginx/conf.d
       - nginx-logs:/var/log/nginx
       - ssl-certs:/etc/nginx/ssl:ro
+    depends_on:
+      - deepsearch-app
+      - searxng
     networks:
       - deepsearch-network
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-      resources:
-        limits:
-          memory: 256M
-          cpus: "0.5"
-        reservations:
-          memory: 64M
-          cpus: "0.1"
-      labels:
-        - "com.deepsearch.service=proxy"
+    labels:
+      - "com.deepsearch.service=proxy"
 
 networks:
   deepsearch-network:
-    driver: overlay
-    attachable: true
+    driver: bridge
 
 volumes:
   searxng-data:
-    name: deepsearch-searxng-data
-    driver: local
   searxng-settings:
-    name: deepsearch-searxng-settings
-    driver: local
   redis-data:
-    name: deepsearch-redis-data
-    driver: local
   app-logs:
-    name: deepsearch-app-logs
-    driver: local
   nginx-config:
-    name: deepsearch-nginx-config
-    driver: local
   nginx-logs:
-    name: deepsearch-nginx-logs
-    driver: local
   ssl-certs:
-    name: deepsearch-ssl-certs
-    driver: local
