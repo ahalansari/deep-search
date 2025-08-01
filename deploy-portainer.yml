@@ -1,12 +1,15 @@
 # Docker Swarm Deployment for DeepSearch (Portainer)
 # 
-# IMPORTANT: Build the image first, then deploy this stack
+# IMPORTANT: Create network and build image first, then deploy this stack
 # 
-# STEP 1: Build and push the image manually:
+# STEP 1: Create the overlay network (run on manager node):
+#   docker network create --driver overlay --attachable deepsearch-network
+# 
+# STEP 2: Build and push the image manually:
 #   docker build -t aalansari/deep-search:latest .
 #   docker push aalansari/deep-search:latest
 # 
-# STEP 2: Deploy this stack in Portainer Swarm mode
+# STEP 3: Deploy this stack in Portainer Swarm mode
 # 
 # The image aalansari/deep-search:latest will be pulled from Docker Hub
 #
@@ -164,10 +167,8 @@ services:
 
 networks:
   deepsearch-network:
-    driver: overlay
-    attachable: true
-    driver_opts:
-      encrypted: "true"
+    external: true
+    name: deepsearch-network
 
 volumes:
   searxng-data:
