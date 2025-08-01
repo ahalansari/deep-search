@@ -20,12 +20,12 @@ services:
   deepsearch-app:
     image: aalansari/deep-search:latest
     ports:
-      - target: 3000
-        published: 3000
+      - target: 3002
+        published: 3002
         mode: host
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=${APP_URL:-http://localhost:3000}
+      - NEXT_PUBLIC_API_URL=${APP_URL:-http://localhost:3002}
       - SEARXNG_URL=http://searxng:8080
       - AI_URL=${AI_URL:-http://host.docker.internal:1234}
     networks:
@@ -33,7 +33,7 @@ services:
     volumes:
       - app-logs:/app/logs
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3002/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -54,7 +54,7 @@ services:
       labels:
         - "traefik.enable=true"
         - "traefik.http.routers.deepsearch.rule=Host(`${APP_DOMAIN:-deepsearch.local}`)"
-        - "traefik.http.services.deepsearch.loadbalancer.server.port=3000"
+        - "traefik.http.services.deepsearch.loadbalancer.server.port=3002"
         - "com.deepsearch.service=app"
 
   # SearXNG Search Engine
