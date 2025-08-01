@@ -1,14 +1,14 @@
-# Portainer Stack Deployment File for DeepSearch
-# Use this file to deploy the complete DeepSearch stack in Portainer
+# Portainer Docker Compose Deployment File for DeepSearch
+# Use this file when deploying from Git repository in Portainer
 
 version: '3.8'
 
 services:
   # Next.js DeepSearch Application
   deepsearch-app:
-    image: ghcr.io/yourusername/deepsearch:latest  # Replace with your image
-    container_name: deepsearch-app
-    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "${APP_PORT:-3000}:3000"
     environment:
@@ -29,25 +29,15 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: "1"
-        reservations:
-          memory: 512M
-          cpus: "0.5"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.deepsearch.rule=Host(`${APP_DOMAIN:-deepsearch.local}`)"
       - "traefik.http.services.deepsearch.loadbalancer.server.port=3000"
       - "com.deepsearch.service=app"
 
-  # SearXNG Search Engine (Integrated from existing setup)
+  # SearXNG Search Engine
   searxng:
     image: searxng/searxng:latest
-    container_name: deepsearch-searxng
-    restart: unless-stopped
     ports:
       - "${SEARXNG_PORT:-8080}:8080"
     volumes:
@@ -64,14 +54,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "0.5"
-        reservations:
-          memory: 256M
-          cpus: "0.25"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.searxng.rule=Host(`${SEARXNG_DOMAIN:-search.local}`)"
@@ -81,8 +63,6 @@ services:
   # Redis Cache
   redis:
     image: redis:7-alpine
-    container_name: deepsearch-redis
-    restart: unless-stopped
     command: >
       redis-server 
       --appendonly yes 
@@ -100,22 +80,12 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "0.5"
-        reservations:
-          memory: 128M
-          cpus: "0.1"
     labels:
       - "com.deepsearch.service=redis"
 
   # Nginx Reverse Proxy (Optional)
   nginx:
     image: nginx:alpine
-    container_name: deepsearch-nginx
-    restart: unless-stopped
     ports:
       - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"
@@ -128,40 +98,12 @@ services:
       - searxng
     networks:
       - deepsearch-network
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: "0.5"
-        reservations:
-          memory: 64M
-          cpus: "0.1"
     labels:
       - "com.deepsearch.service=proxy"
-
-  # Watchtower for Auto-Updates (Optional)
-  watchtower:
-    image: containrrr/watchtower
-    container_name: deepsearch-watchtower
-    restart: unless-stopped
-    environment:
-      - WATCHTOWER_CLEANUP=true
-      - WATCHTOWER_POLL_INTERVAL=${UPDATE_INTERVAL:-3600}
-      - WATCHTOWER_INCLUDE_STOPPED=true
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    networks:
-      - deepsearch-network
-    labels:
-      - "com.deepsearch.service=watchtower"
 
 networks:
   deepsearch-network:
     driver: bridge
-    name: deepsearch-network
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
 
 volumes:
   searxng-data:
